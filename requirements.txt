@@ -1,0 +1,16 @@
+# MedGemma Impact Challenge — dependencies
+# Install: pip install -r requirements.txt
+
+# Orchestration & LLM
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-google-vertexai>=2.0.0
+
+# Config and env
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# Optional: Hugging Face for MedGemma / local inference
+# transformers>=4.36.0
+# torch>=2.0.0
+# huggingface-hub>=0.20.0

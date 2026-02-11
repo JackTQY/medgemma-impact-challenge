@@ -100,9 +100,13 @@ Thumbs.db
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Local data / models (uncomment if needed)
-# data/
-# models/
-# *.pt
-# *.pth
-# *.ckpt
+# Local data / models — ignore contents, keep .gitkeep
+data/*
+!data/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
