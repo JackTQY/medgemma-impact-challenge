@@ -7,16 +7,13 @@ from src.state import ClinicalState
 from src.agents import scribe_node, auditor_node, verifier_node
 
 
-def run_workflow(initial_state: ClinicalState) -> ClinicalState:
+def run_workflow(initial_state: ClinicalState, model=None) -> ClinicalState:
     """
     Run the linear workflow: scribe → auditor → verifier.
-    TODO: Replace with LangGraph StateGraph when langgraph is in use:
-      - add_node("scribe", scribe_node), add_node("auditor", auditor_node), add_node("verifier", verifier_node)
-      - add_edge("scribe", "auditor"), add_edge("auditor", "verifier")
-      - compile() and invoke(initial_state)
+    Pass a LangChain chat model (e.g. from src.models.get_medgemma_model()) to use real MedGemma/Gemma.
     """
     state = dict(initial_state)
-    state = scribe_node(state)
+    state = scribe_node(state, model=model)
     state = auditor_node(state)
     state = verifier_node(state)
     return state
