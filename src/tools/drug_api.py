@@ -11,5 +11,9 @@ def check_interactions(medication_ids: List[str], conditions: List[str] | None =
     Check for interactions among medications (and optionally conditions).
     TODO: Call external API or local knowledge base; return {interactions: [...], warnings: [...]}.
     """
-    # Stub: return empty until API is wired
-    return {"interactions": [], "warnings": []}
+    interactions: List[Dict[str, Any]] = []
+    warnings: List[str] = []
+    if medication_ids:
+        # Stub: one mock warning when meds present so auditor flow is testable
+        warnings.append("Mock: verify dose and renal function for listed medications.")
+    return {"interactions": interactions, "warnings": warnings}

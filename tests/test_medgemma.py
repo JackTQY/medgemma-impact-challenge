@@ -24,3 +24,22 @@ def test_scribe_populates_state():
     out = scribe_node(state)
     assert "scribe_summary" in out
     assert "extracted_entities" in out
+
+
+def test_auditor_populates_state():
+    """Auditor node uses tools and sets clinical_risks, guideline_checks, auditor_notes."""
+    from src.agents.auditor import auditor_node
+
+    state = {
+        "scribe_summary": "Patient on lisinopril for HTN.",
+        "extracted_entities": {"diagnoses": ["HTN"], "medications": ["lisinopril 10mg"]},
+    }
+    out = auditor_node(state)
+    assert "clinical_risks" in out
+    assert "guideline_checks" in out
+    assert "auditor_notes" in out
+    assert isinstance(out["clinical_risks"], list)
+    assert isinstance(out["guideline_checks"], list)
+    # With mock tools, we expect at least one guideline check and optional risks from drug_api
+    assert len(out["guideline_checks"]) >= 1
+    assert "Audited" in out["auditor_notes"] and "risk" in out["auditor_notes"].lower()
