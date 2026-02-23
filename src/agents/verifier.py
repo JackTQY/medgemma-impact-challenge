@@ -41,7 +41,14 @@ def verifier_node(state: dict, model=None) -> dict:
             passed = True
             final_notes = "No key terms to cross-check; summary accepted."
         else:
-            found = sum(1 for t in source_terms if t in summary_terms or t in scribe_summary.lower())
+            # Require whole-word match to avoid false positives (e.g. "ace" in "peaceful")
+            summary_lower = scribe_summary.lower()
+            found = sum(
+                1
+                for t in source_terms
+                if t in summary_terms
+                or re.search(r"\b" + re.escape(t) + r"\b", summary_lower) is not None
+            )
             ratio = found / len(source_terms)
             passed = ratio >= 0.5
             final_notes = f"Cross-checked {len(source_terms)} key term(s) from source; {found} found in summary. {'Consistent.' if passed else 'Possible omission or hallucination.'}"

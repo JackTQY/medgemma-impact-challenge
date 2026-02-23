@@ -63,6 +63,22 @@ def test_verifier_populates_state():
     assert "Cross-checked" in out["final_notes"] or "key term" in out["final_notes"].lower()
 
 
+def test_verifier_no_substring_false_positive():
+    """Verifier requires whole-word matches; e.g. source 'ace' must not match inside 'peaceful'."""
+    from src.agents.verifier import verifier_node
+
+    state = {
+        "raw_ehr": "Patient on ACE inhibitor.",
+        "scribe_summary": "Patient status peaceful.",
+    }
+    out = verifier_node(state)
+    # Source has token "ace"; summary has "peaceful" (ace as substring only). Must not count "ace".
+    notes = out["final_notes"]
+    assert "Cross-checked" in notes and "found in summary" in notes
+    # With substring bug: "ace" in "peaceful" would count -> 2 found (patient, ace). With fix: 1 found (patient only).
+    assert "1 found" in notes, "expected only 'patient' to match; 'ace' must not match inside 'peaceful'"
+
+
 def test_verifier_fails_when_scribe_errors():
     """Verifier sets verification_passed=False when scribe summary is an error."""
     from src.agents.verifier import verifier_node
