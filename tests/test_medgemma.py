@@ -43,3 +43,34 @@ def test_auditor_populates_state():
     # With mock tools, we expect at least one guideline check and optional risks from drug_api
     assert len(out["guideline_checks"]) >= 1
     assert "Audited" in out["auditor_notes"] and "risk" in out["auditor_notes"].lower()
+
+
+def test_verifier_populates_state():
+    """Verifier node cross-checks summary vs source and sets verification fields."""
+    from src.agents.verifier import verifier_node
+
+    state = {
+        "raw_ehr": "65yo M, HTN. On lisinopril 10mg. HbA1c 7.2%.",
+        "scribe_summary": "Diagnoses: HTN. Medications: lisinopril 10mg. Lab: HbA1c 7.2%.",
+    }
+    out = verifier_node(state)
+    assert "verified_summary" in out
+    assert "verification_passed" in out
+    assert "final_notes" in out
+    assert "verification_status" in out
+    assert out["verified_summary"] == state["scribe_summary"]
+    assert isinstance(out["verification_passed"], bool)
+    assert "Cross-checked" in out["final_notes"] or "key term" in out["final_notes"].lower()
+
+
+def test_verifier_fails_when_scribe_errors():
+    """Verifier sets verification_passed=False when scribe summary is an error."""
+    from src.agents.verifier import verifier_node
+
+    state = {
+        "raw_ehr": "Patient has HTN.",
+        "scribe_summary": "Error in scribe extraction: credentials not found.",
+    }
+    out = verifier_node(state)
+    assert out["verification_passed"] is False
+    assert "failed" in out["final_notes"].lower() or "missing" in out["final_notes"].lower()

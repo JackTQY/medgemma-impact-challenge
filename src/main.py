@@ -5,6 +5,7 @@ With real MedGemma: set USE_MEDGEMMA=1 and USE_MEDGEMMA_BACKEND=vertex or huggin
 """
 
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,6 +16,14 @@ load_dotenv(_project_root / ".env")
 
 from src.graphs.clinical_workflow import run_workflow
 from src.models import get_medgemma_model
+
+
+def _one_line(s: str, max_len: int = 200) -> str:
+    """Collapse newlines and extra spaces so JSON-like text fits on one line for display."""
+    if not s:
+        return ""
+    t = re.sub(r"\s+", " ", s.strip())
+    return (t[:max_len] + "...") if len(t) > max_len else t
 
 
 def _format_entities(entities: dict | None) -> str:
@@ -54,12 +63,12 @@ def print_workflow_result(result: dict) -> None:
     print(f"     Raw EHR:    {raw[:200]}{'...' if len(raw) > 200 else ''}")
     print()
     print("  2. SCRIBE (Intake) - value: structured extraction from free text")
-    print(f"     Summary:    {scribe[:200]}{'...' if len(scribe) > 200 else ''}")
+    print(f"     Summary:    {_one_line(scribe)}")
     print("     Extracted entities:")
     print(_format_entities(entities))
     print()
     print("  3. AUDITOR - value: risk/conflict detection vs guidelines")
-    print(f"     Notes:      {auditor_notes[:200]}{'...' if len(auditor_notes) > 200 else ''}")
+    print(f"     Notes:      {_one_line(auditor_notes)}")
     if risks:
         for i, r in enumerate(risks, 1):
             desc = r.get("description", r) if isinstance(r, dict) else getattr(r, "description", r)
@@ -68,9 +77,9 @@ def print_workflow_result(result: dict) -> None:
         print("     Flagged risks: (none)")
     print()
     print("  4. VERIFIER - value: final check vs source, reduce hallucinations")
-    print(f"     Verified summary: {verified[:200]}{'...' if len(verified) > 200 else ''}")
+    print(f"     Verified summary: {_one_line(verified)}")
     print(f"     Passed:     {passed}")
-    print(f"     Final notes: {final_notes[:200]}{'...' if len(final_notes) > 200 else ''}")
+    print(f"     Final notes: {_one_line(final_notes)}")
     print()
     print(sep)
     print("  VALUE OF AGENTIC WORKFLOW")
