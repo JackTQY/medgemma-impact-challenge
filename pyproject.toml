@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "medgemma-impact-challenge"
 version = "0.1.0"
-description = "MedGemma Impact Challenge — AI/agentic project"
+description = "MedGemma Impact Challenge — multi-agent clinical workflow (Scribe, Auditor, Verifier)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -25,7 +25,7 @@ classifiers = [
 dependencies = [
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
-    "langchain-google-vertexai>=2.0.0",
+    "langchain-google-genai>=2.0.0",
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0",
     "pydantic>=2.0.0",
@@ -37,6 +37,11 @@ dev = [
     "pytest-cov>=4.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+]
+local = [
+    "transformers>=4.36.0",
+    "torch>=2.0.0",
+    "accelerate>=0.25.0",
 ]
 
 [project.scripts]

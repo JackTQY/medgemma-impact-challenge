@@ -100,7 +100,10 @@ Thumbs.db
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Local data / models — ignore contents, keep .gitkeep
+# Downloaded local LLM weights (MedGemma, etc.); do not commit
+models/
+
+# Local data — ignore contents, keep .gitkeep
 data/*
 !data/.gitkeep
 data/raw/*

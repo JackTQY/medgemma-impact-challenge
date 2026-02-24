@@ -3,6 +3,8 @@ Agent 1: Clinical Data Extraction (Intake Scribe).
 Extracts core clinical entities from raw EHR notes.
 """
 
+import json
+import re
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.state import ClinicalState, ExtractedMedicalEntities
 
@@ -12,8 +14,67 @@ You are a Senior Clinical Scribe. Your task is to extract structured medical inf
 from raw physician notes. 
 Focus on accuracy. If a piece of information is not present, return an empty list.
 Extract: Diagnoses, Medications, Lab Results, Procedures, Allergies, and Vitals.
-Format your response as a valid JSON object matching the requested schema.
+Format your response as a valid JSON object with keys: Diagnoses, Medications, Lab Results, Procedures, Allergies, Vitals (each an array of strings or objects for labs/vitals).
 """
+
+
+def _parse_scribe_json(text: str) -> dict | None:
+    """Try to extract a JSON object from scribe summary (e.g. inside ```json ... ```)."""
+    if not (text or "").strip():
+        return None
+    # Unwrap markdown code block if present
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    raw = match.group(1).strip() if match else text.strip()
+    # Try to find first { ... } if there's extra prose
+    if "{" in raw:
+        start = raw.index("{")
+        depth = 0
+        for i, c in enumerate(raw[start:], start):
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    raw = raw[start : i + 1]
+                    break
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def _scribe_json_to_entities(data: dict) -> dict:
+    """Map LLM JSON keys (any casing) to ExtractedMedicalEntities-style dict."""
+    key_aliases = {
+        "diagnoses": ["diagnoses", "Diagnoses"],
+        "medications": ["medications", "Medications"],
+        "lab_results": ["lab_results", "Lab Results", "LabResults"],
+        "procedures": ["procedures", "Procedures"],
+        "allergies": ["allergies", "Allergies"],
+        "vitals": ["vitals", "Vitals"],
+    }
+    out = {
+        "diagnoses": [],
+        "medications": [],
+        "lab_results": [],
+        "procedures": [],
+        "allergies": [],
+        "vitals": [],
+        "notes": {},
+    }
+    for our_key, aliases in key_aliases.items():
+        for alias in aliases:
+            val = data.get(alias)
+            if val is None:
+                continue
+            if isinstance(val, list):
+                if our_key in ("lab_results", "vitals"):
+                    out[our_key] = [x if isinstance(x, dict) else {"value": str(x)} for x in val]
+                else:
+                    out[our_key] = [str(x) for x in val]
+            break
+    return out
+
 
 def scribe_node(state: dict, model=None):
     """
@@ -31,8 +92,12 @@ def scribe_node(state: dict, model=None):
         ]
         try:
             response = model.invoke(messages)
-            state["scribe_summary"] = getattr(response, "content", str(response)) or "Successfully extracted structured clinical data."
-            # TODO: parse response into ExtractedMedicalEntities and set state["extracted_entities"]
+            content = getattr(response, "content", str(response)) or "Successfully extracted structured clinical data."
+            state["scribe_summary"] = content
+            parsed = _parse_scribe_json(content)
+            if parsed:
+                entity_dict = _scribe_json_to_entities(parsed)
+                state["extracted_entities"] = ExtractedMedicalEntities.model_validate(entity_dict)
         except Exception as e:
             state["scribe_summary"] = f"Error in scribe extraction: {str(e)}"
     else:

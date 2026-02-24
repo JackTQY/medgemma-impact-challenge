@@ -11,7 +11,5 @@ python-dotenv>=1.0.0
 pyyaml>=6.0
 pydantic>=2.0.0
 
-# Optional: Hugging Face for MedGemma / local inference
-# transformers>=4.36.0
-# torch>=2.0.0
-# huggingface-hub>=0.20.0
+# Optional: local MedGemma (USE_MEDGEMMA_BACKEND=local)
+# pip install -r requirements-local.txt

@@ -6,6 +6,7 @@ With real MedGemma: set USE_MEDGEMMA=1 and USE_MEDGEMMA_BACKEND=vertex or huggin
 
 import os
 import re
+import warnings
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,6 +14,9 @@ from dotenv import load_dotenv
 # Load .env from project root so it works regardless of cwd (e.g. python -m src.main)
 _project_root = Path(__file__).resolve().parent.parent
 load_dotenv(_project_root / ".env")
+
+# Suppress Google Auth "quota project" warning when using ADC (e.g. gcloud auth application-default login)
+warnings.filterwarnings("ignore", message=".*without a quota project.*", category=UserWarning)
 
 from src.graphs.clinical_workflow import run_workflow
 from src.models import get_medgemma_model
