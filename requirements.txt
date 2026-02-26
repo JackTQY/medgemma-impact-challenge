@@ -13,3 +13,7 @@ pydantic>=2.0.0
 
 # Optional: local MedGemma (USE_MEDGEMMA_BACKEND=local)
 # pip install -r requirements-local.txt
+
+# Web app (local demo)
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0

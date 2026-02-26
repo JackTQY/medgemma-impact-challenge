@@ -83,6 +83,12 @@ Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
    `MEDGEMMA_LOCAL_GGUF=models/medgemma-4b-it-gguf/medgemma-4b-it-Q4_K_M.gguf` (or the path the script prints).
 4. Run: `python -m src.main`
 
+**Web app (local demo):** A simple UI to run the workflow and invoke MedGemma from the browser:
+
+1. From project root: `pip install -r requirements.txt` (includes FastAPI and uvicorn).
+2. Start the server: `uvicorn src.web.app:app --reload`
+3. Open http://127.0.0.1:8000 — enter or paste EHR text, click **Run workflow**. Results show Scribe extraction, Auditor risks, Verifier status, and LangChain LLM call log. No REST API beyond a single `POST /api/run` JSON endpoint; the app runs entirely in local mode.
+
 ---
 
 ## Repo layout
@@ -95,6 +101,7 @@ Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
 - `src/models.py` — `get_medgemma_model(backend)` for Vertex, Hugging Face, local, or local_gguf.
 - `scripts/download_medgemma_local.py` — Download full `google/medgemma-4b-it` into `models/medgemma-1.5-4b-it` (~10 GB) for local backend.
 - `scripts/download_medgemma_gguf.py` — Download a single quantized GGUF file (~1.8–2.6 GB) for local_gguf backend.
+- `src/web/` — Local web app: `app.py` (FastAPI), `static/index.html` (single-page UI). Run with `uvicorn src.web.app:app --reload`.
 - `tests/` — Workflow, scribe, auditor, verifier (including whole-word match), state tests.
 
 ---
@@ -104,3 +111,4 @@ Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
 - **Orchestration:** LangChain-style nodes and state dict; model via `get_medgemma_model()`.
 - **Model:** Gemini on Vertex AI (default when `USE_MEDGEMMA=1`), Hugging Face API, **local** MedGemma (full 4B), or **local_gguf** (quantized MedGemma, smaller download); optional.
 - **Config:** `python-dotenv` from project root; `.env` optional (stub runs without it).
+- **Web:** FastAPI + single HTML/JS page for local demo; one `POST /api/run` endpoint, no separate frontend build.
