@@ -48,7 +48,7 @@ State is a single Pydantic `ClinicalState` passed through all nodes; workflow is
 
 | Component | Default (no `.env` / no `USE_MEDGEMMA`) | With `USE_MEDGEMMA=1` (Vertex / HF / local) |
 |-----------|------------------------------------------|-------------------------------------------|
-| **Scribe** | Stub: no LLM; placeholder summary and `extracted_entities` | Real: Vertex AI (Gemini), Hugging Face API, or **local** MedGemma for entity extraction |
+| **Scribe** | Stub: no LLM; placeholder summary and `extracted_entities` | Real: Vertex AI (Gemini), Hugging Face API, **local** MedGemma, or **local_gguf** (quantized) for entity extraction |
 | **Auditor** | Full logic; tools return mock data | Same; tools still stub (no live RAG or drug API) |
 | **Verifier** | Full heuristic (key-term cross-check) | Same |
 | **Workflow & tests** | Full pipeline, 8 tests | Same; Scribe uses real model when configured |
@@ -61,7 +61,27 @@ State is a single Pydantic `ClinicalState` passed through all nodes; workflow is
 
 **Hugging Face (cloud API):** Set `USE_MEDGEMMA_BACKEND=huggingface` and `HF_TOKEN` in `.env`. See `.env.example`.
 
-**Local MedGemma (optional, for future use):** The smallest Google MedGemma is 4B (~10GB disk, significant RAM/GPU). Local backend code is in place; set `USE_MEDGEMMA_BACKEND=local`, install `requirements-local.txt`, and point `MEDGEMMA_LOCAL_MODEL` at a local model folder or HF id. Prefer Vertex for typical use.
+**Local MedGemma (optional, for future use):** The smallest official MedGemma is 4B instruction-tuned (~10GB disk, significant RAM/GPU). To download into the project and run locally:
+
+1. Install local deps: `pip install -r requirements-local.txt`
+2. Download the model (from project root):  
+   `python scripts/download_medgemma_local.py`  
+   (If the model is gated, set `HF_TOKEN` in `.env` or in your environment.)
+3. In `.env` set: `USE_MEDGEMMA=1`, `USE_MEDGEMMA_BACKEND=local`, and  
+   `MEDGEMMA_LOCAL_MODEL=models/medgemma-1.5-4b-it` (or the path the script prints).
+4. Run: `python -m src.main`
+
+Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
+
+**Quantized (GGUF) — much smaller download (~1.8–2.6 GB):** Use the same pipeline with a single GGUF file instead of the full 4B weights:
+
+1. Install GGUF deps: `pip install -r requirements-gguf.txt`
+2. Download one quantized file (from project root):  
+   `python scripts/download_medgemma_gguf.py`  
+   (Uses Q4_K_M by default; set `MEDGEMMA_GGUF_QUANT=Q2_K` for smallest ~1.8 GB.)
+3. In `.env` set: `USE_MEDGEMMA=1`, `USE_MEDGEMMA_BACKEND=local_gguf`, and  
+   `MEDGEMMA_LOCAL_GGUF=models/medgemma-4b-it-gguf/medgemma-4b-it-Q4_K_M.gguf` (or the path the script prints).
+4. Run: `python -m src.main`
 
 ---
 
@@ -72,7 +92,9 @@ State is a single Pydantic `ClinicalState` passed through all nodes; workflow is
 - `src/agents/` — `scribe_node`, `auditor_node`, `verifier_node`.
 - `src/state.py` — `ClinicalState`, `ExtractedMedicalEntities`, `ClinicalRisk`, `VerificationStatus`.
 - `src/tools/` — `medical_db.lookup_guidelines`, `drug_api.check_interactions` (stubs).
-- `src/models.py` — `get_medgemma_model(backend)` for Vertex, Hugging Face, or local.
+- `src/models.py` — `get_medgemma_model(backend)` for Vertex, Hugging Face, local, or local_gguf.
+- `scripts/download_medgemma_local.py` — Download full `google/medgemma-4b-it` into `models/medgemma-1.5-4b-it` (~10 GB) for local backend.
+- `scripts/download_medgemma_gguf.py` — Download a single quantized GGUF file (~1.8–2.6 GB) for local_gguf backend.
 - `tests/` — Workflow, scribe, auditor, verifier (including whole-word match), state tests.
 
 ---
@@ -80,5 +102,5 @@ State is a single Pydantic `ClinicalState` passed through all nodes; workflow is
 ## Tech stack
 
 - **Orchestration:** LangChain-style nodes and state dict; model via `get_medgemma_model()`.
-- **Model:** Gemini on Vertex AI (default when `USE_MEDGEMMA=1`), Hugging Face API, or **local** MedGemma (4B on CPU/GPU); optional.
+- **Model:** Gemini on Vertex AI (default when `USE_MEDGEMMA=1`), Hugging Face API, **local** MedGemma (full 4B), or **local_gguf** (quantized MedGemma, smaller download); optional.
 - **Config:** `python-dotenv` from project root; `.env` optional (stub runs without it).

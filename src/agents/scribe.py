@@ -90,8 +90,18 @@ def scribe_node(state: dict, model=None):
             SystemMessage(content=SCRIBE_SYSTEM_PROMPT),
             HumanMessage(content=f"Extract entities from this EHR note:\n\n{raw_ehr}"),
         ]
+        call_log = state.setdefault("__llm_call_log", [])
+        call_log.append({
+            "call": len(call_log) + 1,
+            "node": "scribe_node",
+            "method": "invoke",
+            "purpose": "entity extraction from raw EHR (SystemMessage + HumanMessage → LLM)",
+        })
         try:
             response = model.invoke(messages)
+            from src.models import _LAST_LLM_CALL_TOKENS
+            if _LAST_LLM_CALL_TOKENS and call_log:
+                call_log[-1].update(_LAST_LLM_CALL_TOKENS)
             content = getattr(response, "content", str(response)) or "Successfully extracted structured clinical data."
             state["scribe_summary"] = content
             parsed = _parse_scribe_json(content)

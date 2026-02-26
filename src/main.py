@@ -1,7 +1,7 @@
 """
 Entry point to run the clinical workflow.
 Usage (from project root): python -m src.main
-With real MedGemma: set USE_MEDGEMMA=1 and USE_MEDGEMMA_BACKEND=vertex or huggingface in .env
+With real MedGemma: set USE_MEDGEMMA=1 and USE_MEDGEMMA_BACKEND=vertex, huggingface, local, or local_gguf in .env
 """
 
 import os
@@ -40,6 +40,36 @@ def _format_entities(entities: dict | None) -> str:
         if val:
             lines.append(f"  {key}: {val}")
     return "\n".join(lines) if lines else "  (empty)"
+
+
+def print_langchain_usage(result: dict) -> None:
+    """Print how many LangChain LLM calls were made and how they were orchestrated."""
+    log = result.get("__llm_call_log") or []
+    if not log:
+        return
+    n = len(log)
+    sep = "-" * 60
+    print(sep)
+    print("  LANGCHAIN LLM USAGE (agentic workflow)")
+    print(sep)
+    print(f"  Total LLM API calls this run: {n}")
+    print()
+    print("  How it was orchestrated:")
+    print("    • State (ClinicalState dict) is passed through all nodes; each node returns updated state.")
+    print("    • Scribe: builds [SystemMessage, HumanMessage], calls model.invoke(messages), parses JSON into state.")
+    print("    • Auditor: reads state (scribe_summary, extracted_entities), uses tools (stub), returns risks + notes.")
+    print("    • Verifier: cross-checks summary vs raw_ehr, sets verification_passed and final_notes.")
+    print("    Flow:  [Scribe] --invoke--> [Auditor] --> [Verifier]  (single LLM call at Scribe)")
+    print()
+    print("  Call log:")
+    for entry in log:
+        parts = [f"    #{entry.get('call', '?')} {entry.get('node', '?')}.{entry.get('method', 'invoke')} — {entry.get('purpose', '')}"]
+
+        if entry.get("n_prompt_tokens") is not None and entry.get("n_output_tokens") is not None:
+            parts.append(f" ({entry['n_prompt_tokens']} → {entry['n_output_tokens']} tokens)")
+        print("".join(parts))
+    print(sep)
+    print()
 
 
 def print_workflow_result(result: dict) -> None:
@@ -98,6 +128,7 @@ def main() -> None:
     initial_state = {
         "raw_ehr": "65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies.",
         "patient_id": "sample-001",
+        "__llm_call_log": [],
     }
     model = None
     backend = os.getenv("USE_MEDGEMMA_BACKEND", "").strip().lower()
@@ -110,6 +141,7 @@ def main() -> None:
             print("Could not load MedGemma model: %s. Running with stub.\n" % e)
     result = run_workflow(initial_state, model=model)
     print_workflow_result(result)
+    print_langchain_usage(result)
 
 
 if __name__ == "__main__":
