@@ -18,7 +18,7 @@ python -m src.main
 pytest
 ```
 
-You should see the full pipeline output (raw EHR → Scribe → Auditor → Verifier) and **8 passing tests**. This is stub mode: same code path, no external APIs.
+You will be prompted to pick **simple (1)** or **complex (2)** sample; if you don’t answer within 5 seconds, the **simple** sample is used (faster). You should then see the full pipeline output (raw EHR → Scribe → Auditor → Verifier) and **8 passing tests**. This is stub mode: same code path, no external APIs. For a **full example run with real MedGemma** (LLM I/O, workflow result, and what it demonstrates), see [Example run (real MedGemma)](docs/EXAMPLE_RUN.md).
 
 ---
 
@@ -38,7 +38,7 @@ You should see the full pipeline output (raw EHR → Scribe → Auditor → Veri
 | **Auditor** | Compare extracted data to guidelines; flag drug interactions and risks | Calls `lookup_guidelines(query)` and `check_interactions(medications, conditions)`. Tools are **stub implementations** (mock returns) so the flow is testable without external APIs. Writes `clinical_risks`, `guideline_checks`, `auditor_notes`. |
 | **Verifier** | Reduce hallucinations by checking summary against source | **Implemented.** Heuristic: extract key terms from `raw_ehr` and require whole-word matches in `scribe_summary` (≥50% term overlap to pass). Sets `verified_summary`, `verification_passed`, `final_notes`, `verification_status`. |
 
-State is a single Pydantic `ClinicalState` passed through all nodes; workflow is linear (no LangGraph graph file yet—sequential function calls).
+The workflow is implemented as a **LangGraph StateGraph**: explicit state (`ClinicalCouncilState`), checkpointing, and a conditional self-correction loop (Verifier → Scribe retry or END). See [LangGraph agentic workflow](#langgraph-agentic-workflow) below.
 
 **Note:** When using the real LLM, Scribe returns JSON in `scribe_summary`; the pipeline does **not** yet parse that JSON into `state["extracted_entities"]`, so in real runs the Auditor’s entity lists may be empty unless pre-filled. Stub mode pre-fills placeholder entities.
 
@@ -69,7 +69,7 @@ State is a single Pydantic `ClinicalState` passed through all nodes; workflow is
    (If the model is gated, set `HF_TOKEN` in `.env` or in your environment.)
 3. In `.env` set: `USE_MEDGEMMA=1`, `USE_MEDGEMMA_BACKEND=local`, and  
    `MEDGEMMA_LOCAL_MODEL=models/medgemma-1.5-4b-it` (or the path the script prints).
-4. Run: `python -m src.main`
+4. Run: `python -m src.main` — you’ll be asked to choose **simple** (~73s with local LLM) or **complex** (~524s) sample; default is simple after 5s.
 
 Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
 
@@ -87,14 +87,44 @@ Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
 
 1. From project root: `pip install -r requirements.txt` (includes FastAPI and uvicorn).
 2. Start the server: `uvicorn src.web.app:app --reload`
-3. Open http://127.0.0.1:8000 — enter or paste EHR text, click **Run workflow**. Results show Scribe extraction, Auditor risks, Verifier status, and LangChain LLM call log. No REST API beyond a single `POST /api/run` JSON endpoint; the app runs entirely in local mode.
+3. Open http://127.0.0.1:8000 — the textarea defaults to the **simple** sample; use **Load simple sample** / **Load complex sample** to switch (complex is more comprehensive but much slower with local LLM). Click **Run workflow**. Results show Scribe extraction, Auditor risks, Verifier status, and LangChain LLM call log. No REST API beyond `POST /api/run` and `GET /api/samples`; the app runs entirely in local mode.
+
+---
+
+## LangGraph agentic workflow
+
+The pipeline is orchestrated by **LangGraph** as a state machine, not a one-off linear script.
+
+**Compared with a simple linear pipeline** (scribe → auditor → verifier in plain Python), the current design adds:
+
+- **Explicit state:** `StateGraph(ClinicalCouncilState)`. State is a TypedDict; each node returns a partial update that is merged in.
+- **Cyclical flow:** After Verifier, a **conditional edge** either goes to END or back to Scribe (self-correction loop, at most once).
+- **Checkpointing:** `MemorySaver` stores state after every node so execution can be resumed or inspected (time-travel).
+- **Optional human-in-the-loop:** Compile with `interrupt_before=["verifier"]` to pause before verification and resume later.
+
+**Sophisticated agentic behaviour:** (1) **Decision gate** — Verifier outcome chooses the next step (end vs retry). (2) **Self-correction** — if verification fails, the graph routes back to Scribe once (with `retry_count` and a retry hint in the prompt). (3) **Durable state** — state is first-class and checkpointed. (4) **Optional HIL** — execution can stop before Verifier for human approval.
+
+**Diagram (text):**
+
+```
+    +----------------+     +----------------+     +----------------+
+    |     SCRIBE      |---->|    AUDITOR     |---->|    VERIFIER    |
+    | (LLM extract)   |     | (tools/risk)   |     | (cross-check)  |
+    +--------^-------+     +----------------+     +--------+-------+
+             |                                            |
+             |  conditional: passed? end : retry? scribe   |
+             +---------------------------------------------+
+```
+
+A visual diagram is in [`assets/langgraph-workflow.png`](assets/langgraph-workflow.png).
 
 ---
 
 ## Repo layout
 
-- `src/main.py` — Entry point; builds initial state, runs workflow, prints result.
-- `src/graphs/clinical_workflow.py` — `run_workflow(initial_state, model)` (Scribe → Auditor → Verifier).
+- `docs/EXAMPLE_RUN.md` — Illustrative output from a real MedGemma run: LLM prompt/response, workflow result, and what it demonstrates (for hiring managers / reviewers).
+- `src/main.py` — Entry point; prompts for simple (1) or complex (2) sample (default simple after 5s), builds initial state, runs workflow, prints result.
+- `src/graphs/clinical_workflow.py` — LangGraph `StateGraph`: `run_workflow(initial_state, model)`, conditional edge (Verifier → Scribe retry or END), `ClinicalCouncilState`, `WORKFLOW_DIAGRAM` / `WORKFLOW_DESCRIPTION`.
 - `src/agents/` — `scribe_node`, `auditor_node`, `verifier_node`.
 - `src/state.py` — `ClinicalState`, `ExtractedMedicalEntities`, `ClinicalRisk`, `VerificationStatus`.
 - `src/tools/` — `medical_db.lookup_guidelines`, `drug_api.check_interactions` (stubs).
@@ -108,7 +138,7 @@ Prefer Vertex for typical use; local is useful for air-gapped or offline runs.
 
 ## Tech stack
 
-- **Orchestration:** LangChain-style nodes and state dict; model via `get_medgemma_model()`.
+- **Orchestration:** LangGraph `StateGraph` (explicit state, conditional edges, checkpointer); LangChain chat model via `get_medgemma_model()`.
 - **Model:** Gemini on Vertex AI (default when `USE_MEDGEMMA=1`), Hugging Face API, **local** MedGemma (full 4B), or **local_gguf** (quantized MedGemma, smaller download); optional.
 - **Config:** `python-dotenv` from project root; `.env` optional (stub runs without it).
 - **Web:** FastAPI + single HTML/JS page for local demo; one `POST /api/run` endpoint, no separate frontend build.

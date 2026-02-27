@@ -3,7 +3,13 @@
 import pytest
 
 from src.state import ClinicalState
-from src.graphs.clinical_workflow import run_workflow
+from src.graphs.clinical_workflow import run_workflow, WORKFLOW_DIAGRAM, WORKFLOW_DESCRIPTION
+
+
+def test_langgraph_workflow_documented():
+    """LangGraph agentic workflow has human-readable diagram and description (for docs/CLI)."""
+    assert WORKFLOW_DIAGRAM and "SCRIBE" in WORKFLOW_DIAGRAM and "VERIFIER" in WORKFLOW_DIAGRAM
+    assert WORKFLOW_DESCRIPTION and "LangGraph" in WORKFLOW_DESCRIPTION and "conditional" in WORKFLOW_DESCRIPTION.lower()
 
 
 def test_workflow_runs():

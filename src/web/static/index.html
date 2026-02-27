@@ -80,6 +80,24 @@
       opacity: 0.6;
       cursor: not-allowed;
     }
+    button.secondary {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .sample-hint {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0 0 0.5rem 0;
+    }
+    .sample-buttons {
+      margin-bottom: 0.5rem;
+    }
     #loading {
       display: none;
       color: var(--muted);
@@ -275,7 +293,12 @@
 
   <form id="form">
     <label for="raw_ehr">Raw EHR / clinical note</label>
-    <textarea id="raw_ehr" name="raw_ehr" required placeholder="e.g. 65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies.">65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies.</textarea>
+    <p class="sample-hint">Default: simple sample (faster). Use complex sample for a more comprehensive run.</p>
+    <div class="sample-buttons">
+      <button type="button" id="btn_simple" class="secondary">Load simple sample</button>
+      <button type="button" id="btn_complex" class="secondary">Load complex sample</button>
+    </div>
+    <textarea id="raw_ehr" name="raw_ehr" required placeholder="Paste or edit clinical note...">65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies.</textarea>
     <label for="patient_id">Patient ID (optional)</label>
     <input type="text" id="patient_id" name="patient_id" value="web-001" placeholder="web-001" />
     <button type="submit" id="btn">Run workflow</button>
@@ -287,9 +310,30 @@
   <script>
     const form = document.getElementById('form');
     const btn = document.getElementById('btn');
+    const rawEhrEl = document.getElementById('raw_ehr');
     const loading = document.getElementById('loading');
     const errEl = document.getElementById('error');
     const resultEl = document.getElementById('result');
+
+    // Load samples from API and set default to simple (faster run).
+    let samples = { simple: '', complex: '' };
+    fetch('/api/samples')
+      .then(r => r.json())
+      .then(data => {
+        samples = data;
+        // Keep current value if user already edited; else ensure simple default
+        if (rawEhrEl && rawEhrEl.value.trim() === '65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies.') {
+          rawEhrEl.value = data.simple || rawEhrEl.value;
+        }
+      })
+      .catch(() => {});
+
+    document.getElementById('btn_simple').addEventListener('click', () => {
+      if (samples.simple) rawEhrEl.value = samples.simple;
+    });
+    document.getElementById('btn_complex').addEventListener('click', () => {
+      if (samples.complex) rawEhrEl.value = samples.complex;
+    });
 
     function showError(msg) {
       errEl.textContent = msg;

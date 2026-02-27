@@ -50,7 +50,8 @@ def verifier_node(state: dict, model=None) -> dict:
                 or re.search(r"\b" + re.escape(t) + r"\b", summary_lower) is not None
             )
             ratio = found / len(source_terms)
-            passed = ratio >= 0.5
+            # Slightly strict (0.55) so complex notes may trigger retry on first terse summary
+            passed = ratio >= 0.55
             final_notes = f"Cross-checked {len(source_terms)} key term(s) from source; {found} found in summary. {'Consistent.' if passed else 'Possible omission or hallucination.'}"
 
     state["verified_summary"] = scribe_summary

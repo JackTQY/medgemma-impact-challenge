@@ -2,10 +2,13 @@
 Entry point to run the clinical workflow.
 Usage (from project root): python -m src.main
 With real MedGemma: set USE_MEDGEMMA=1 and USE_MEDGEMMA_BACKEND=vertex, huggingface, local, or local_gguf in .env
+You will be prompted to pick simple (1) or complex (2) sample; defaults to simple after 5 seconds.
 """
 
 import os
 import re
+import sys
+import threading
 import warnings
 from pathlib import Path
 
@@ -18,7 +21,7 @@ load_dotenv(_project_root / ".env")
 # Suppress Google Auth "quota project" warning when using ADC (e.g. gcloud auth application-default login)
 warnings.filterwarnings("ignore", message=".*without a quota project.*", category=UserWarning)
 
-from src.graphs.clinical_workflow import run_workflow
+from src.graphs.clinical_workflow import run_workflow, WORKFLOW_DESCRIPTION, WORKFLOW_DIAGRAM
 from src.models import get_medgemma_model
 
 
@@ -55,12 +58,12 @@ def print_langchain_usage(result: dict) -> None:
     print(f"  Total LLM API calls this run: {n}")
     print()
     print("  How it was orchestrated:")
-    print("    • State (ClinicalState dict) is passed through all nodes; each node returns updated state.")
-    print("    • Scribe: builds [SystemMessage, HumanMessage], calls model.invoke(messages), parses JSON into state.")
-    print("    • Auditor: reads state (scribe_summary, extracted_entities), uses tools (stub), returns risks + notes.")
-    print("    • Verifier: cross-checks summary vs raw_ehr, sets verification_passed and final_notes.")
-    print("    Flow:  [Scribe] --invoke--> [Auditor] --> [Verifier]  (single LLM call at Scribe)")
+    print("    • " + WORKFLOW_DESCRIPTION)
+    print("    • Scribe: [SystemMessage, HumanMessage] + model.invoke(messages); on retry adds verification-failure hint.")
+    print("    • Flow: [Scribe] → [Auditor] → [Verifier] → (passed? END : retry_count≤1? Scribe : END)")
     print()
+    print("  LangGraph workflow diagram:")
+    print(WORKFLOW_DIAGRAM)
     print("  Call log:")
     for entry in log:
         parts = [f"    #{entry.get('call', '?')} {entry.get('node', '?')}.{entry.get('method', 'invoke')} — {entry.get('purpose', '')}"]
@@ -123,10 +126,55 @@ def print_workflow_result(result: dict) -> None:
     print()
 
 
+# Simple sample: short note, faster run (~73s with local MedGemma).
+SIMPLE_RAW_EHR = "65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies."
+
+# Complex sample: comprehensive note to exercise extraction and verification (~524s with local MedGemma; may trigger retries).
+COMPLEX_RAW_EHR = """68yo M, routine follow-up. PMH: Hypertension, Type 2 diabetes mellitus, CKD stage 3a, atrial fibrillation (rate-controlled), GERD, hyperlipidemia.
+
+Meds: Lisinopril 10mg daily, Metformin 1000mg BID, Apixaban 5mg BID, Omeprazole 20mg daily, Atorvastatin 40mg nightly, Metoprolol 25mg BID.
+
+Labs (last 6 months): HbA1c 7.8% (3mo ago), eGFR 52 mL/min/1.73m2, K+ 4.2, Na 138, TSH 2.1, LDL 98 mg/dL, creatinine 1.4 mg/dL; troponin negative. Echocardiogram: EF 55%, no significant valve disease. Colonoscopy 2024: benign.
+
+Allergies: Penicillin (rash), Sulfa (hives). Vitals today: BP 142/88, HR 78, weight 89 kg, BMI 28. No chest pain, no orthopnea. Compliance good. Plan: continue current regimen; repeat BMP and HbA1c in 3 months."""
+
+SAMPLE_CHOICE_TIMEOUT_SEC = 5
+
+
+def _choose_sample_cli() -> str:
+    """Prompt user to pick simple (1) or complex (2) sample; default to simple after 5 seconds."""
+    result: list[str] = []
+
+    def read_input():
+        try:
+            line = input().strip() or "1"
+            result.append(line)
+        except (EOFError, KeyboardInterrupt):
+            result.append("1")
+
+    print("Run simple (1) or complex (2) sample? [1 = simple, ~73s; 2 = complex, ~524s with local LLM]")
+    print("Choice [1] (default in %s s): " % SAMPLE_CHOICE_TIMEOUT_SEC, end="", flush=True)
+    t = threading.Thread(target=read_input, daemon=True)
+    t.start()
+    t.join(timeout=SAMPLE_CHOICE_TIMEOUT_SEC)
+    if not result:
+        print("1")
+        print("(No input in %s s — using simple sample.)" % SAMPLE_CHOICE_TIMEOUT_SEC)
+        return "1"
+    choice = result[0] if result else "1"
+    return "2" if choice == "2" else "1"
+
+
 def main() -> None:
     """Run the Clinical Council workflow (Scribe → Auditor → Verifier)."""
+    sample = _choose_sample_cli()
+    raw_ehr = COMPLEX_RAW_EHR if sample == "2" else SIMPLE_RAW_EHR
+    if sample == "2":
+        print("Using complex sample.\n")
+    else:
+        print("Using simple sample.\n")
     initial_state = {
-        "raw_ehr": "65yo M, HTN. On lisinopril 10mg. Last HbA1c 7.2%. No known allergies.",
+        "raw_ehr": raw_ehr,
         "patient_id": "sample-001",
         "__llm_call_log": [],
     }

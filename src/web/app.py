@@ -21,6 +21,9 @@ from pydantic import BaseModel, Field
 from src.graphs.clinical_workflow import run_workflow
 from src.models import get_medgemma_model
 
+# Import sample EHRs so the web UI can offer simple (faster) vs complex (slower) without duplicating strings.
+from src.main import COMPLEX_RAW_EHR, SIMPLE_RAW_EHR
+
 
 app = FastAPI(
     title="Clinical Council",
@@ -70,6 +73,14 @@ def index():
     if not html_path.is_file():
         raise HTTPException(status_code=500, detail="index.html not found")
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/samples")
+def samples():
+    """Return simple and complex sample EHR text (default: simple is faster ~73s, complex ~524s with local LLM)."""
+    return JSONResponse(
+        content={"simple": SIMPLE_RAW_EHR, "complex": COMPLEX_RAW_EHR}
+    )
 
 
 @app.post("/api/run")

@@ -86,9 +86,14 @@ def scribe_node(state: dict, model=None):
     raw_ehr = state.get("raw_ehr", "")
 
     if model is not None:
+        retry_hint = (
+            "\n\n[Re-extraction pass: the previous output failed verification. Emphasize consistency with the source text.]"
+            if state.get("retry_count", 0) > 0
+            else ""
+        )
         messages = [
             SystemMessage(content=SCRIBE_SYSTEM_PROMPT),
-            HumanMessage(content=f"Extract entities from this EHR note:\n\n{raw_ehr}"),
+            HumanMessage(content=f"Extract entities from this EHR note:\n\n{raw_ehr}{retry_hint}"),
         ]
         call_log = state.setdefault("__llm_call_log", [])
         call_log.append({
